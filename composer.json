@@ -1,11 +1,18 @@
 {
     "name": "ezeanyimhenry/email-validator",
-    "description": "A simple email validation package",
+    "description": "A PHP package for validating email addresses with detailed checks including MX records, disposable, and banned email lists.",
     "type": "library",
+    "keywords": ["email", "validation", "php", "composer"],
+    "homepage": "https://github.com/ezeanyimhenry/email-validator",
     "license": "MIT",
     "autoload": {
         "psr-4": {
             "EzeanyimHenry\\EmailValidator\\": "src/"
+        }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "EzeanyimHenry\\EmailValidator\\Tests\\": "tests/"
         }
     },
     "authors": [
@@ -19,5 +26,7 @@
     },
     "require-dev": {
         "phpunit/phpunit": "^9.0"
-    }
+    },
+    "minimum-stability": "stable",
+    "prefer-stable": true
 }
