@@ -7,9 +7,16 @@ use InvalidArgumentException;
 class EmailValidator
 {
     protected $config;
+    protected $freeEmailDomains;
+    protected $disposableEmailDomains;
+    protected $bannedEmailDomains;
 
     public function __construct(array $config = [])
     {
+        // Load email domain lists
+        $this->freeEmailDomains = include __DIR__ . '/../config/free_email_domains.php';
+        $this->disposableEmailDomains = include __DIR__ . '/../config/disposable_email_domains.php';
+        $this->bannedEmailDomains = include __DIR__ . '/../config/banned_email_domains.php';
         // Default settings, can be overridden by the config array
         $this->config = array_merge([
             'checkMxRecords' => true,
@@ -99,24 +106,21 @@ class EmailValidator
     // Example: check against banned domains or emails
     protected function isBannedEmail($email)
     {
-        $bannedDomains = ['banned.com', 'spamdomain.com'];
         $domain = substr(strrchr($email, "@"), 1);
-        return in_array($domain, $bannedDomains);
+        return in_array($domain, $this->bannedEmailDomains);
     }
 
     // Example: check if the email is from a disposable email provider
     protected function isDisposableEmail($email)
     {
-        $disposableDomains = ['mailinator.com', '10minutemail.com'];
         $domain = substr(strrchr($email, "@"), 1);
-        return in_array($domain, $disposableDomains);
+        return in_array($domain, $this->disposableEmailDomains);
     }
 
     // Example: check if the email is a free email provider (like Gmail, Yahoo)
     protected function isFreeEmail($email)
     {
-        $freeEmailDomains = ['gmail.com', 'yahoo.com', 'hotmail.com'];
         $domain = substr(strrchr($email, "@"), 1);
-        return in_array($domain, $freeEmailDomains);
+        return in_array($domain, $this->freeEmailDomains);
     }
 }

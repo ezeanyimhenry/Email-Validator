@@ -1,0 +1,25 @@
+<?php
+
+return [
+    'banned.com',
+    'spamdomain.com',
+    'fakeemail.com',
+    'unwanted.com',
+    'malicious.com',
+    'example.com',
+    'tempmail.com',
+    '10minutemail.com',
+    'throwawaymail.com',
+    'guerrillamail.com',
+    'yopmail.com',
+    'getnada.com',
+    'fake-mail-generator.com',
+    'disposable.com',
+    'trashmail.com',
+    'temp-mail.org',
+    'maildrop.cc',
+    '1secmail.com',
+    'spamgourmet.com',
+    'sharklasers.com',
+    'mytemp.email',
+];

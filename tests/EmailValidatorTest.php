@@ -20,7 +20,7 @@ class EmailValidatorTest extends TestCase
 
     public function testValidEmail()
     {
-        $result = $this->validator->validate('valid.email@example.com');
+        $result = $this->validator->validate('valid.email@email.com');
         $this->assertTrue($result['isValid']);
         $this->assertEquals('The email is valid.', $result['message']);
     }
@@ -75,7 +75,7 @@ class EmailValidatorTest extends TestCase
     public function testMultipleEmails()
     {
         $emails = [
-            'valid.email@example.com',
+            'valid.email@email.com',
             'user@gmail.com',
             'invalid-email',
             'test@mailinator.com',
@@ -84,8 +84,8 @@ class EmailValidatorTest extends TestCase
         $results = $this->validator->validate($emails);
 
         // Test first email: valid
-        $this->assertTrue($results['valid.email@example.com']['isValid']);
-        $this->assertEquals('The email is valid.', $results['valid.email@example.com']['message']);
+        $this->assertTrue($results['valid.email@email.com']['isValid']);
+        $this->assertEquals('The email is valid.', $results['valid.email@email.com']['message']);
 
         // Test second email: free provider, checkFreeEmail is false so it's valid
         $this->assertTrue($results['user@gmail.com']['isValid']);
