@@ -15,7 +15,7 @@ A PHP package for validating email addresses with various checks such as MX reco
 You can install the package via Composer. Run the following command:
 
 ```bash
-composer require your-vendor/email-validator
+composer require ezeanyimhenry/email-validator
 
 ## Usage
 
@@ -30,7 +30,7 @@ You can validate a single email address as follows:
 
 require 'vendor/autoload.php'; // Autoload files using Composer
 
-use VendorName\EmailValidator\EmailValidator;
+use EzeanyimHenry\EmailValidator\EmailValidator;
 
 // Create a new instance of the EmailValidator
 $emailValidator = new EmailValidator();
@@ -53,7 +53,7 @@ To validate multiple email addresses at once, simply pass an array:
 
 require 'vendor/autoload.php'; // Autoload files using Composer
 
-use VendorName\EmailValidator\EmailValidator;
+use EzeanyimHenry\EmailValidator\EmailValidator;
 
 // Create a new instance of the EmailValidator
 $emailValidator = new EmailValidator();
@@ -79,7 +79,7 @@ You can customize the validator's behavior by passing configuration options when
 
 require 'vendor/autoload.php'; // Autoload files using Composer
 
-use VendorName\EmailValidator\EmailValidator;
+use EzeanyimHenry\EmailValidator\EmailValidator;
 
 // Create a new instance with custom configuration
 $emailValidator = new EmailValidator([
