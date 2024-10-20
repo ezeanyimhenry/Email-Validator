@@ -16,6 +16,7 @@ You can install the package via Composer. Run the following command:
 
 ```bash
 composer require ezeanyimhenry/email-validator
+```
 
 ## Usage
 
@@ -43,6 +44,7 @@ if ($result['isValid']) {
 } else {
     echo "Error: " . $result['message'];
 }
+```
 
 ## Validating Multiple Email Addresses
 
@@ -69,6 +71,7 @@ $results = $emailValidator->validate($emails);
 foreach ($results as $email => $result) {
     echo "$email: " . ($result['isValid'] ? "Valid" : "Invalid - " . $result['message']) . "\n";
 }
+```
 
 ## Configuration Options
 
@@ -91,6 +94,7 @@ $emailValidator = new EmailValidator([
 
 // Validate an email
 $result = $emailValidator->validate('test@example.com');
+```
 
 
 ### Error Handling
@@ -101,6 +105,7 @@ The `validate()` method returns an associative array containing the validation r
 if (!$result['isValid']) {
     echo "Validation failed: " . $result['message'];
 }
+```
 
 ### Testing
 
