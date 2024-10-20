@@ -1,0 +1,20 @@
+{
+    "name": "ezeanyimhenry/email-validator",
+    "description": "A simple email validation package",
+    "type": "library",
+    "license": "MIT",
+    "autoload": {
+        "psr-4": {
+            "EzeanyimHenry\\EmailValidator\\": "src/"
+        }
+    },
+    "authors": [
+        {
+            "name": "Henry Ezeanyim",
+            "email": "henry@oracus.ng"
+        }
+    ],
+    "require": {
+        "php": ">=7.4"
+    }
+}
