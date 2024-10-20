@@ -1,6 +1,6 @@
 <?php
 
-namespace EzeanyimHenry\EmailValidator;
+namespace VendorName\EmailValidator;
 
 use InvalidArgumentException;
 
@@ -39,30 +39,54 @@ class EmailValidator
         return $results;
     }
 
-    // Validate a single email
+    // Validate a single email and return a detailed result with messages
     protected function validateSingle($email)
     {
+        // Check if email format is valid
         if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
-            return false; // Invalid email format
+            return [
+                'isValid' => false,
+                'message' => 'Invalid email format.'
+            ];
         }
 
+        // Check MX records
         if ($this->config['checkMxRecords'] && !$this->checkMxRecords($email)) {
-            return false; // Invalid MX records
+            return [
+                'isValid' => false,
+                'message' => 'MX records do not exist for this email domain.'
+            ];
         }
 
+        // Check if email is on a banned list
         if ($this->config['checkBannedListedEmail'] && $this->isBannedEmail($email)) {
-            return false; // Email is on a banned list
+            return [
+                'isValid' => false,
+                'message' => 'The email domain is on the banned list.'
+            ];
         }
 
+        // Check if email is from a disposable email provider
         if ($this->config['checkDisposableEmail'] && $this->isDisposableEmail($email)) {
-            return false; // Disposable email detected
+            return [
+                'isValid' => false,
+                'message' => 'Disposable email detected.'
+            ];
         }
 
+        // Check if email is from a free email provider (e.g., Gmail)
         if ($this->config['checkFreeEmail'] && $this->isFreeEmail($email)) {
-            return false; // Free email detected
+            return [
+                'isValid' => false,
+                'message' => 'Email belongs to a free email provider.'
+            ];
         }
 
-        return true; // Valid email
+        // Return success if all checks pass
+        return [
+            'isValid' => true,
+            'message' => 'The email is valid.'
+        ];
     }
 
     // Check if email domain has valid MX records
