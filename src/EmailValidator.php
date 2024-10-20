@@ -1,6 +1,6 @@
 <?php
 
-namespace VendorName\EmailValidator;
+namespace EzeanyimHenry\EmailValidator;
 
 use InvalidArgumentException;
 
