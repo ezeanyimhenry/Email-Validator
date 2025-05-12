@@ -18,6 +18,7 @@ class ComposerStaticInit4625a4eaf10965188c0c7d8d85e496b7
         ),
         'E' => 
         array (
+            'EzeanyimHenry\\EmailValidator\\Tests\\' => 35,
             'EzeanyimHenry\\EmailValidator\\' => 29,
         ),
         'D' => 
@@ -31,6 +32,10 @@ class ComposerStaticInit4625a4eaf10965188c0c7d8d85e496b7
         'PhpParser\\' => 
         array (
             0 => __DIR__ . '/..' . '/nikic/php-parser/lib/PhpParser',
+        ),
+        'EzeanyimHenry\\EmailValidator\\Tests\\' => 
+        array (
+            0 => __DIR__ . '/../..' . '/tests',
         ),
         'EzeanyimHenry\\EmailValidator\\' => 
         array (

@@ -1,79 +1,134 @@
 <?php
 
 use PHPUnit\Framework\TestCase;
-use EzeanyimHenry\EmailValidator\EmailValidator;
+use EzeanyimHenry\EmailValidator\Tests\MockEmailValidator;
 
 class EmailValidatorTest extends TestCase
 {
-    protected $validator;
-
-    protected function setUp(): void
+    protected function createValidator(array $config = []): MockEmailValidator
     {
-        // Default config for the validator
-        $this->validator = new EmailValidator([
+        return new MockEmailValidator(array_merge([
             'checkMxRecords' => false,
-            'checkBannedListedEmail' => true,
-            'checkDisposableEmail' => true,
+            'checkBannedListedEmail' => false,
+            'checkDisposableEmail' => false,
             'checkFreeEmail' => false,
-        ]);
+            'checkEmailExistence' => false,
+            'checkMailServerResponsive' => false,
+            'checkGreylisting' => false,
+        ], $config));
     }
 
     public function testValidEmail()
     {
-        $result = $this->validator->validate('valid.email@email.com');
+        $validator = $this->createValidator();
+        $result = $validator->validate('valid.email@email.com');
         $this->assertTrue($result['isValid']);
         $this->assertEquals('The email is valid.', $result['message']);
     }
 
     public function testInvalidEmailFormat()
     {
-        $result = $this->validator->validate('invalid-email');
+        $validator = $this->createValidator();
+        $result = $validator->validate('invalid-email');
         $this->assertFalse($result['isValid']);
         $this->assertEquals('Invalid email format.', $result['message']);
     }
 
     public function testBannedEmailDomain()
     {
-        $bannedValidator = new EmailValidator([
-            'checkBannedListedEmail' => true,
-        ]);
+        $validator = $this->createValidator(['checkBannedListedEmail' => true]);
+        $validator->setBannedEmailDomains(['banned.com']);
 
-        $result = $bannedValidator->validate('user@banned.com');
+        $result = $validator->validate('user@banned.com');
         $this->assertFalse($result['isValid']);
         $this->assertEquals('The email domain is on the banned list.', $result['message']);
     }
 
     public function testDisposableEmail()
     {
-        $result = $this->validator->validate('test@mailinator.com');
+        $validator = $this->createValidator(['checkDisposableEmail' => true]);
+        $validator->setDisposableEmailDomains(['mailinator.com']);
+
+        $result = $validator->validate('test@mailinator.com');
         $this->assertFalse($result['isValid']);
         $this->assertEquals('Disposable email detected.', $result['message']);
     }
 
     public function testFreeEmail()
     {
-        $freeEmailValidator = new EmailValidator([
-            'checkFreeEmail' => true, // Enable free email detection
-        ]);
+        $validator = $this->createValidator(['checkFreeEmail' => true]);
+        $validator->setFreeEmailDomains(['gmail.com']);
 
-        $result = $freeEmailValidator->validate('user@gmail.com');
+        $result = $validator->validate('user@gmail.com');
         $this->assertFalse($result['isValid']);
         $this->assertEquals('Email belongs to a free email provider.', $result['message']);
     }
 
     public function testMxRecordCheck()
     {
-        $mxValidator = new EmailValidator([
-            'checkMxRecords' => true, // Enable MX record checking for the test
-        ]);
+        $validator = $this->createValidator(['checkMxRecords' => true]);
+        $validator->setMockResponse('checkMxRecords', false);
 
-        $result = $mxValidator->validate('user@nonexistent-domain.example');
+        $result = $validator->validate('user@nonexistent-domain.example');
         $this->assertFalse($result['isValid']);
         $this->assertEquals('MX records do not exist for this email domain.', $result['message']);
     }
 
+    public function testEmailExistence()
+    {
+        $validator = $this->createValidator(['checkEmailExistence' => true]);
+        $validator->setMockResponse('checkEmailExistence', true);
+
+        $result = $validator->validate('valid.email@email.com');
+        $this->assertTrue($result['isValid']);
+        $this->assertEquals('The email is valid.', $result['message']);
+    }
+
+    public function testEmailNonExistence()
+    {
+        $validator = $this->createValidator(['checkEmailExistence' => true]);
+        $validator->setMockResponse('checkEmailExistence', false);
+
+        $result = $validator->validate('nonexistentemail@email.com');
+        $this->assertFalse($result['isValid']);
+        $this->assertEquals('Email address does not exist.', $result['message']);
+    }
+
+    public function testMailServerResponsiveness()
+    {
+        $validator = $this->createValidator(['checkMailServerResponsive' => true]);
+        $validator->setMockResponse('isMailServerResponsive', true);
+
+        $result = $validator->validate('valid.email@email.com');
+        $this->assertTrue($result['isValid']);
+        $this->assertEquals('The email is valid.', $result['message']);
+    }
+
+    public function testMailServerUnresponsiveness()
+    {
+        $validator = $this->createValidator(['checkMailServerResponsive' => true]);
+        $validator->setMockResponse('isMailServerResponsive', false);
+
+        $result = $validator->validate('user@unresponsive-domain.com');
+        $this->assertFalse($result['isValid']);
+        $this->assertEquals('Mail server is not responsive.', $result['message']);
+    }
+
+    public function testGreylisting()
+    {
+        $validator = $this->createValidator(['checkGreylisting' => true]);
+        $validator->setMockResponse('isGreylisted', true);
+
+        $result = $validator->validate('test@greylisted-domain.com');
+        $this->assertFalse($result['isValid']);
+        $this->assertEquals('Email server is using greylisting.', $result['message']);
+    }
+
     public function testMultipleEmails()
     {
+        $validator = $this->createValidator(['checkDisposableEmail' => true]);
+        $validator->setDisposableEmailDomains(['mailinator.com']);
+
         $emails = [
             'valid.email@email.com',
             'user@gmail.com',
@@ -81,21 +136,17 @@ class EmailValidatorTest extends TestCase
             'test@mailinator.com',
         ];
 
-        $results = $this->validator->validate($emails);
+        $results = $validator->validate($emails);
 
-        // Test first email: valid
         $this->assertTrue($results['valid.email@email.com']['isValid']);
         $this->assertEquals('The email is valid.', $results['valid.email@email.com']['message']);
 
-        // Test second email: free provider, checkFreeEmail is false so it's valid
         $this->assertTrue($results['user@gmail.com']['isValid']);
         $this->assertEquals('The email is valid.', $results['user@gmail.com']['message']);
 
-        // Test third email: invalid format
         $this->assertFalse($results['invalid-email']['isValid']);
         $this->assertEquals('Invalid email format.', $results['invalid-email']['message']);
 
-        // Test fourth email: disposable
         $this->assertFalse($results['test@mailinator.com']['isValid']);
         $this->assertEquals('Disposable email detected.', $results['test@mailinator.com']['message']);
     }
