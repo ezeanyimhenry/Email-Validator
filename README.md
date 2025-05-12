@@ -1,6 +1,6 @@
 # Email Validator
 
-A PHP package for validating email addresses with various checks such as MX records, disposable email detection, and banned email lists.
+A PHP package for validating email addresses with various checks such as MX records, disposable email detection, and banned email lists, email existence & responsiveness.
 
 ## Features
 
@@ -9,6 +9,8 @@ A PHP package for validating email addresses with various checks such as MX reco
 - Detect disposable email addresses
 - Check against banned email lists
 - Check for free email provider addresses
+- Check if mailbox exists
+- Check is mailbox is responsive
 
 ## Installation
 
@@ -90,12 +92,14 @@ $emailValidator = new EmailValidator([
     'checkBannedListedEmail' => true,
     'checkDisposableEmail' => true,
     'checkFreeEmail' => false,
+    'checkEmailExistence' => true,
+    'checkMailServerResponsive' => true,
+    'checkGreylisting' => true,
 ]);
 
 // Validate an email
 $result = $emailValidator->validate('test@example.com');
 ```
-
 
 ### Error Handling
 

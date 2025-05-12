@@ -1,8 +1,13 @@
 {
     "name": "ezeanyimhenry/email-validator",
-    "description": "A PHP package for validating email addresses with detailed checks including MX records, disposable, and banned email lists.",
+    "description": "A PHP package for validating email addresses with detailed checks including MX records, disposable, and banned email lists, email existence and responsiveness.",
     "type": "library",
-    "keywords": ["email", "validation", "php", "composer"],
+    "keywords": [
+        "email",
+        "validation",
+        "php",
+        "composer"
+    ],
     "homepage": "https://github.com/ezeanyimhenry/email-validator",
     "license": "MIT",
     "autoload": {
@@ -29,5 +34,5 @@
     },
     "minimum-stability": "stable",
     "prefer-stable": true,
-    "version": "1.1.0"
+    "version": "2.0"
 }
