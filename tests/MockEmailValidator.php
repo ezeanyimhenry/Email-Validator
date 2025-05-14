@@ -30,21 +30,29 @@ class MockEmailValidator extends EmailValidator
 
     protected function checkEmailExistence($email)
     {
-        return $this->mockResponses['checkEmailExistence'] ?? parent::checkEmailExistence($email);
+        return array_key_exists('checkEmailExistence', $this->mockResponses)
+            ? $this->mockResponses['checkEmailExistence']
+            : parent::checkEmailExistence($email);
     }
 
     protected function checkMxRecords($email)
     {
-        return $this->mockResponses['checkMxRecords'] ?? parent::checkMxRecords($email);
+        return array_key_exists('checkMxRecords', $this->mockResponses)
+            ? $this->mockResponses['checkMxRecords']
+            : parent::checkMxRecords($email);
     }
 
     protected function isMailServerResponsive($email)
     {
-        return $this->mockResponses['isMailServerResponsive'] ?? parent::isMailServerResponsive($email);
+        return array_key_exists('isMailServerResponsive', $this->mockResponses)
+            ? $this->mockResponses['isMailServerResponsive']
+            : parent::isMailServerResponsive($email);
     }
 
     protected function isGreylisted($email)
     {
-        return $this->mockResponses['isGreylisted'] ?? parent::isGreylisted($email);
+        return array_key_exists('isGreylisted', $this->mockResponses)
+            ? $this->mockResponses['isGreylisted']
+            : parent::isGreylisted($email);
     }
 }

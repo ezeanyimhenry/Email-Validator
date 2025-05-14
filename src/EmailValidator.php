@@ -52,74 +52,157 @@ class EmailValidator
     // Validate a single email and return a detailed result with messages
     protected function validateSingle($email)
     {
-        // Check if email format is valid
-        if (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
+        $report = [];
+
+        // Format check
+        $isValidFormat = filter_var($email, FILTER_VALIDATE_EMAIL) !== false;
+        $report['format'] = [
+            'status' => $isValidFormat,
+            'message' => $isValidFormat ? 'Valid email format.' : 'Invalid email format.'
+        ];
+
+        // If the format is invalid, we can't continue with other checks
+        if (!$isValidFormat) {
             return [
                 'isValid' => false,
-                'message' => 'Invalid email format.'
+                'message' => 'Invalid email format.',
+                'report' => $report
             ];
         }
 
-        // Check MX records
-        if ($this->config['checkMxRecords'] && !$this->checkMxRecords($email)) {
-            return [
-                'isValid' => false,
-                'message' => 'MX records do not exist for this email domain.'
+        $domain = substr(strrchr($email, "@"), 1);
+
+        // MX Records check
+        if ($this->config['checkMxRecords']) {
+            $mx = $this->checkMxRecords($email);
+            $report['mxRecords'] = [
+                'status' => $mx,
+                'message' => $mx ? 'MX records found.' : 'MX records not found.'
+            ];
+        } else {
+            $report['mxRecords'] = [
+                'status' => true,
+                'message' => 'MX records check disabled.'
             ];
         }
 
-        // Check if email is on a banned list
-        if ($this->config['checkBannedListedEmail'] && $this->isBannedEmail($email)) {
-            return [
-                'isValid' => false,
-                'message' => 'The email domain is on the banned list.'
+        // Banned domain check
+        if ($this->config['checkBannedListedEmail']) {
+            $isBanned = $this->isBannedEmail($email);
+            $report['bannedList'] = [
+                'status' => !$isBanned,
+                'message' => !$isBanned ? 'Not on banned list.' : 'The email domain is on the banned list.'
+            ];
+        } else {
+            $report['bannedList'] = [
+                'status' => true,
+                'message' => 'Banned list check disabled.'
             ];
         }
 
-        // Check if email is from a disposable email provider
-        if ($this->config['checkDisposableEmail'] && $this->isDisposableEmail($email)) {
-            return [
-                'isValid' => false,
-                'message' => 'Disposable email detected.'
+        // Disposable email check
+        if ($this->config['checkDisposableEmail']) {
+            $isDisposable = $this->isDisposableEmail($email);
+            $report['disposable'] = [
+                'status' => !$isDisposable,
+                'message' => !$isDisposable ? 'Not a disposable email.' : 'Disposable email detected.'
+            ];
+        } else {
+            $report['disposable'] = [
+                'status' => true,
+                'message' => 'Disposable email check disabled.'
             ];
         }
 
-        // Check if email is from a free email provider (e.g., Gmail)
-        if ($this->config['checkFreeEmail'] && $this->isFreeEmail($email)) {
-            return [
-                'isValid' => false,
-                'message' => 'Email belongs to a free email provider.'
+        // Free email check
+        if ($this->config['checkFreeEmail']) {
+            $isFree = $this->isFreeEmail($email);
+            $report['freeProvider'] = [
+                'status' => !$isFree,
+                'message' => !$isFree ? 'Not a free email provider.' : 'Email belongs to a free email provider.'
+            ];
+        } else {
+            $report['freeProvider'] = [
+                'status' => true,
+                'message' => 'Free email check disabled.'
             ];
         }
 
-        // Check if email exists on the mail server
-        if ($this->config['checkEmailExistence'] && !$this->checkEmailExistence($email)) {
-            return [
-                'isValid' => false,
-                'message' => 'Email address does not exist.'
+        // Email existence check
+        if ($this->config['checkEmailExistence']) {
+            $existence = $this->checkEmailExistence($email);
+            $report['emailExistence'] = [
+                'status' => $existence === true,
+                'message' => $existence === true ? 'Email exists on mail server.' :
+                    ($existence === false ? 'Email address does not exist.' : 'Could not verify email existence.')
+            ];
+        } else {
+            $report['emailExistence'] = [
+                'status' => true,
+                'message' => 'Email existence check disabled.'
             ];
         }
 
-        // Check if mail server is responsive
-        if ($this->config['checkMailServerResponsive'] && !$this->isMailServerResponsive($email)) {
-            return [
-                'isValid' => false,
-                'message' => 'Mail server is not responsive.'
+        // Mail server responsiveness
+        if ($this->config['checkMailServerResponsive']) {
+            $responsive = $this->isMailServerResponsive($email);
+            $report['mailServerResponsive'] = [
+                'status' => $responsive,
+                'message' => $responsive ? 'Mail server is responsive.' : 'Mail server is not responsive.'
+            ];
+        } else {
+            $report['mailServerResponsive'] = [
+                'status' => true,
+                'message' => 'Mail server responsiveness check disabled.'
             ];
         }
 
-        // Check for greylisting
-        if ($this->config['checkGreylisting'] && $this->isGreylisted($email)) {
-            return [
-                'isValid' => false,
-                'message' => 'Email server is using greylisting.'
+        // Greylisting
+        if ($this->config['checkGreylisting']) {
+            $greylisted = $this->isGreylisted($email);
+            $report['greylisting'] = [
+                'status' => !$greylisted,
+                'message' => !$greylisted ? 'No greylisting detected.' : 'Email server is using greylisting.'
+            ];
+        } else {
+            $report['greylisting'] = [
+                'status' => true,
+                'message' => 'Greylisting check disabled.'
             ];
         }
 
-        // Return success if all checks pass
+        // Determine overall validity by checking if any check failed
+        $isValid = true;
+        $failedCheck = null;
+
+        foreach ($report as $checkName => $checkResult) {
+            if ($checkResult['status'] === false) {
+                $isValid = false;
+                $failedCheck = $checkName;
+                break;
+            }
+        }
+
+        // Build the message
+        $message = 'The email is valid.';
+        if (!$isValid) {
+            $messages = [
+                'format' => 'Invalid email format.',
+                'bannedList' => 'The email domain is on the banned list.',
+                'disposable' => 'Disposable email detected.',
+                'freeProvider' => 'Email belongs to a free email provider.',
+                'mxRecords' => 'MX records do not exist for this email domain.',
+                'emailExistence' => 'Email address does not exist.',
+                'mailServerResponsive' => 'Mail server is not responsive.',
+                'greylisting' => 'Email server is using greylisting.',
+            ];
+            $message = $messages[$failedCheck] ?? 'One or more checks failed.';
+        }
+
         return [
-            'isValid' => true,
-            'message' => 'The email is valid.'
+            'isValid' => $isValid,
+            'message' => $message,
+            'report' => $report
         ];
     }
 
@@ -130,21 +213,21 @@ class EmailValidator
         return checkdnsrr($domain, 'MX');
     }
 
-    // Example: check against banned domains or emails
+    // Check against banned domains or emails
     protected function isBannedEmail($email)
     {
         $domain = substr(strrchr($email, "@"), 1);
         return in_array($domain, $this->bannedEmailDomains);
     }
 
-    // Example: check if the email is from a disposable email provider
+    // Check if the email is from a disposable email provider
     protected function isDisposableEmail($email)
     {
         $domain = substr(strrchr($email, "@"), 1);
         return in_array($domain, $this->disposableEmailDomains);
     }
 
-    // Example: check if the email is a free email provider (like Gmail, Yahoo)
+    // Check if the email is a free email provider (like Gmail, Yahoo)
     protected function isFreeEmail($email)
     {
         $domain = substr(strrchr($email, "@"), 1);
@@ -225,7 +308,6 @@ class EmailValidator
         return $response;
     }
 
-
     // Check if the mail server is responsive
     protected function isMailServerResponsive($email)
     {
@@ -257,7 +339,7 @@ class EmailValidator
         $mxServer = $mxRecords[0]['target'];
         $port = 25;
 
-        $connection = fsockopen($mxServer, $port, $errno, $errstr, 10);
+        $connection = @fsockopen($mxServer, $port, $errno, $errstr, 10);
 
         if (!$connection) {
             return false;  // Unable to connect to the mail server

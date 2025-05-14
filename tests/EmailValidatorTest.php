@@ -24,6 +24,8 @@ class EmailValidatorTest extends TestCase
         $result = $validator->validate('valid.email@email.com');
         $this->assertTrue($result['isValid']);
         $this->assertEquals('The email is valid.', $result['message']);
+        $this->assertTrue($result['report']['format']['status']);
+
     }
 
     public function testInvalidEmailFormat()
@@ -32,6 +34,8 @@ class EmailValidatorTest extends TestCase
         $result = $validator->validate('invalid-email');
         $this->assertFalse($result['isValid']);
         $this->assertEquals('Invalid email format.', $result['message']);
+        $this->assertFalse($result['report']['format']['status']);
+
     }
 
     public function testBannedEmailDomain()
@@ -42,6 +46,7 @@ class EmailValidatorTest extends TestCase
         $result = $validator->validate('user@banned.com');
         $this->assertFalse($result['isValid']);
         $this->assertEquals('The email domain is on the banned list.', $result['message']);
+        $this->assertFalse($result['report']['bannedList']['status']);
     }
 
     public function testDisposableEmail()
@@ -52,6 +57,7 @@ class EmailValidatorTest extends TestCase
         $result = $validator->validate('test@mailinator.com');
         $this->assertFalse($result['isValid']);
         $this->assertEquals('Disposable email detected.', $result['message']);
+        $this->assertFalse($result['report']['disposable']['status']);
     }
 
     public function testFreeEmail()
@@ -62,6 +68,7 @@ class EmailValidatorTest extends TestCase
         $result = $validator->validate('user@gmail.com');
         $this->assertFalse($result['isValid']);
         $this->assertEquals('Email belongs to a free email provider.', $result['message']);
+        $this->assertFalse($result['report']['freeProvider']['status']);
     }
 
     public function testMxRecordCheck()
@@ -72,6 +79,7 @@ class EmailValidatorTest extends TestCase
         $result = $validator->validate('user@nonexistent-domain.example');
         $this->assertFalse($result['isValid']);
         $this->assertEquals('MX records do not exist for this email domain.', $result['message']);
+        $this->assertFalse($result['report']['mxRecords']['status']);
     }
 
     public function testEmailExistence()
@@ -82,6 +90,7 @@ class EmailValidatorTest extends TestCase
         $result = $validator->validate('valid.email@email.com');
         $this->assertTrue($result['isValid']);
         $this->assertEquals('The email is valid.', $result['message']);
+        $this->assertTrue($result['report']['emailExistence']['status']);
     }
 
     public function testEmailNonExistence()
@@ -92,6 +101,7 @@ class EmailValidatorTest extends TestCase
         $result = $validator->validate('nonexistentemail@email.com');
         $this->assertFalse($result['isValid']);
         $this->assertEquals('Email address does not exist.', $result['message']);
+        $this->assertFalse($result['report']['emailExistence']['status']);
     }
 
     public function testMailServerResponsiveness()
@@ -102,6 +112,7 @@ class EmailValidatorTest extends TestCase
         $result = $validator->validate('valid.email@email.com');
         $this->assertTrue($result['isValid']);
         $this->assertEquals('The email is valid.', $result['message']);
+        $this->assertTrue($result['report']['mailServerResponsive']['status']);
     }
 
     public function testMailServerUnresponsiveness()
@@ -112,6 +123,7 @@ class EmailValidatorTest extends TestCase
         $result = $validator->validate('user@unresponsive-domain.com');
         $this->assertFalse($result['isValid']);
         $this->assertEquals('Mail server is not responsive.', $result['message']);
+        $this->assertFalse($result['report']['mailServerResponsive']['status']);
     }
 
     public function testGreylisting()
@@ -122,6 +134,7 @@ class EmailValidatorTest extends TestCase
         $result = $validator->validate('test@greylisted-domain.com');
         $this->assertFalse($result['isValid']);
         $this->assertEquals('Email server is using greylisting.', $result['message']);
+        $this->assertFalse($result['report']['greylisting']['status']);
     }
 
     public function testMultipleEmails()
@@ -140,14 +153,19 @@ class EmailValidatorTest extends TestCase
 
         $this->assertTrue($results['valid.email@email.com']['isValid']);
         $this->assertEquals('The email is valid.', $results['valid.email@email.com']['message']);
+        $this->assertTrue($results['valid.email@email.com']['report']['format']['status']);
 
         $this->assertTrue($results['user@gmail.com']['isValid']);
         $this->assertEquals('The email is valid.', $results['user@gmail.com']['message']);
+        $this->assertTrue($results['user@gmail.com']['report']['format']['status']);
 
         $this->assertFalse($results['invalid-email']['isValid']);
         $this->assertEquals('Invalid email format.', $results['invalid-email']['message']);
+        $this->assertFalse($results['invalid-email']['report']['format']['status']);
 
         $this->assertFalse($results['test@mailinator.com']['isValid']);
         $this->assertEquals('Disposable email detected.', $results['test@mailinator.com']['message']);
+        $this->assertFalse($results['test@mailinator.com']['report']['disposable']['status']);
+
     }
 }
