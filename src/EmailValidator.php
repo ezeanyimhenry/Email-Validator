@@ -23,9 +23,9 @@ class EmailValidator
             'checkBannedListedEmail' => true,
             'checkDisposableEmail' => true,
             'checkFreeEmail' => false,
-            'checkEmailExistence' => true,
-            'checkMailServerResponsive' => true,
-            'checkGreylisting' => true,
+            'checkEmailExistence' => false,
+            'checkMailServerResponsive' => false,
+            'checkGreylisting' => false,
         ], $config);
     }
 
@@ -239,7 +239,10 @@ class EmailValidator
     {
         $domain = substr(strrchr($email, "@"), 1);
 
-        if (!checkdnsrr($domain, 'MX')) {
+        $start = microtime(true);
+        $timeoutLimit = $this->config['timeoutLimit'] ?? 10;
+
+        if (!checkdnsrr($domain, 'MX') || !getmxrr($domain, $mxHosts) || empty($mxHosts)) {
             return null; // Cannot check — no MX record
         }
 
@@ -248,40 +251,46 @@ class EmailValidator
             return null;
         }
 
+        $mxHosts = array_slice($mxHosts, 0, 1);
+        $smtpPorts = [25];
+
         $emailLocalPart = substr($email, 0, strpos($email, '@'));
 
-        $smtpPorts = [25, 465, 587];
-        $connected = false;
-        $response = '';
 
         foreach ($mxHosts as $host) {
             foreach ($smtpPorts as $port) {
+                if ((microtime(true) - $start) > $timeoutLimit) {
+                    return null; // Timeout exceeded
+                }
+
                 $connection = @fsockopen($host, $port, $errno, $errstr, 5);
 
                 if ($connection) {
-                    $connected = true;
                     stream_set_timeout($connection, 5);
-                    $this->smtpSend($connection, "HELO " . $domain);
-                    $this->smtpSend($connection, "MAIL FROM:<check@" . $domain . ">");
-                    $response = $this->smtpSend($connection, "RCPT TO:<$email>");
-                    $this->smtpSend($connection, "QUIT");
-                    fclose($connection);
-                    break 2; // Stop if successful
+
+                    try {
+                        $this->smtpSend($connection, "HELO $domain");
+                        $this->smtpSend($connection, "MAIL FROM:<check@$domain>");
+                        $response = $this->smtpSend($connection, "RCPT TO:<$email>");
+                        $this->smtpSend($connection, "QUIT");
+
+                        fclose($connection);
+
+                        if (preg_match('/^250|^220/', $response)) {
+                            return true;
+                        }
+
+                        if (preg_match('/^550/', $response)) {
+                            return false;
+                        }
+
+                        return null;
+                    } catch (\RuntimeException $e) {
+                        fclose($connection);
+                        return null;
+                    }
                 }
             }
-        }
-
-        if (!$connected) {
-            return null; // Mail server is unreachable
-        }
-
-        // Interpret response
-        if (preg_match('/^250|^220/', $response)) {
-            return true; // Server accepted the address
-        }
-
-        if (preg_match('/^550/', $response)) {
-            return false; // Address does not exist
         }
 
         return null; // Indeterminate
@@ -290,63 +299,56 @@ class EmailValidator
     protected function smtpSend($connection, $cmd)
     {
         if (!is_resource($connection) || feof($connection)) {
-            throw new \RuntimeException("SMTP connection is not valid or has been closed.");
+            throw new \RuntimeException("SMTP connection is invalid or closed.");
         }
 
         $writeResult = @fwrite($connection, $cmd . "\r\n");
-
         if ($writeResult === false) {
-            throw new \RuntimeException("Failed to write command to SMTP server (possibly broken pipe).");
+            throw new \RuntimeException("Failed to send command: $cmd");
         }
 
         $response = fgets($connection, 1024);
 
-        if ($response === false) {
-            throw new \RuntimeException("No response from SMTP server after sending command: $cmd");
+        $meta = stream_get_meta_data($connection);
+        if ($meta['timed_out'] || $response === false) {
+            throw new \RuntimeException("SMTP server timed out after command: $cmd");
         }
 
         return $response;
     }
 
-    // Check if the mail server is responsive
+
     protected function isMailServerResponsive($email)
     {
         $domain = substr(strrchr($email, "@"), 1);
         $mxRecords = dns_get_record($domain, DNS_MX);
-
-        if (empty($mxRecords)) {
-            return false;  // No MX records, mail server unresponsive
-        }
+        if (empty($mxRecords))
+            return false;
 
         $mxServer = $mxRecords[0]['target'];
         $port = 25;
 
-        $connection = @fsockopen($mxServer, $port, $errno, $errstr, 10);
-
+        $connection = @fsockopen($mxServer, $port, $errno, $errstr, 5);
         return $connection ? true : false;
     }
 
-    // Check for greylisting by analyzing the SMTP response
     protected function isGreylisted($email)
     {
         $domain = substr(strrchr($email, "@"), 1);
         $mxRecords = dns_get_record($domain, DNS_MX);
-
-        if (empty($mxRecords)) {
-            return false;  // No MX records, cannot verify greylisting
-        }
+        if (empty($mxRecords))
+            return false;
 
         $mxServer = $mxRecords[0]['target'];
         $port = 25;
 
-        $connection = @fsockopen($mxServer, $port, $errno, $errstr, 10);
+        $connection = @fsockopen($mxServer, $port, $errno, $errstr, 5);
+        if (!$connection)
+            return false;
 
-        if (!$connection) {
-            return false;  // Unable to connect to the mail server
-        }
+        stream_set_timeout($connection, 5);
 
-        // Send EHLO command and RCPT TO command
-        fwrite($connection, "EHLO " . $mxServer . "\r\n");
+        fwrite($connection, "EHLO $mxServer\r\n");
         fgets($connection, 1024);
 
         fwrite($connection, "MAIL FROM:<test@example.com>\r\n");
@@ -356,8 +358,7 @@ class EmailValidator
         $response = fgets($connection, 1024);
 
         fclose($connection);
-
-        // Greylisting is usually indicated by a 450 temporary error code
         return strpos($response, '450') !== false;
     }
+
 }
