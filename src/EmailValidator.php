@@ -238,8 +238,8 @@ class EmailValidator
     protected function checkEmailExistence($email)
     {
         $domain = substr(strrchr($email, "@"), 1);
+        $sender = "verifier@" . (gethostname() ?: 'validator.example.com');
 
-        // Check for MX records and get their priority
         if (!getmxrr($domain, $mxHosts, $mxWeights)) {
             return null; // Cannot check - no MX records
         }
@@ -249,63 +249,94 @@ class EmailValidator
         }
 
         // Sort MX hosts by priority (lower weight = higher priority)
-        array_multisort($mxWeights, SORT_ASC, $mxHosts);
+        $mxRecords = [];
+        foreach ($mxHosts as $index => $host) {
+            $mxRecords[] = [
+                'host' => $host,
+                'priority' => $mxWeights[$index] ?? 0
+            ];
+        }
+        usort($mxRecords, function ($a, $b) {
+            return $a['priority'] - $b['priority'];
+        });
+
+        $mxHosts = array_column($mxRecords, 'host');
+
+        $connectionTimeout = 10; // seconds
+        $responseTimeout = 15; // seconds
 
         // Try each MX host in order of priority
         foreach ($mxHosts as $mxHost) {
             $port = 25;
 
             // Connect to the mail server
-            $connection = @fsockopen($mxHost, $port, $errno, $errstr, 5);
+            $connection = @fsockopen($mxHost, $port, $errno, $errstr, $connectionTimeout);
             if (!$connection) {
                 continue; // Try the next host if this one fails
             }
 
-            // Set a timeout for the connection
-            stream_set_timeout($connection, 5);
+            stream_set_timeout($connection, $responseTimeout);
 
             try {
-                // Read the initial greeting
-                $response = fgets($connection, 1024);
+                $response = $this->readResponse($connection);
                 if (!$response || strpos($response, '220') === false) {
                     fclose($connection);
                     continue; // Try the next host
                 }
 
-                // Send HELO command
-                fwrite($connection, "HELO $domain\r\n");
-                $response = fgets($connection, 1024);
-                if (!$response || strpos($response, '250') === false) {
-                    fclose($connection);
-                    continue; // Try the next host
+                // Send EHLO command first (RFC 5321 compliant)
+                $hostname = gethostname() ?: 'validator.example.com';
+                fwrite($connection, "EHLO $hostname\r\n");
+                $response = $this->readResponse($connection);
+
+                // If EHLO fails, try HELO
+                if (strpos($response, '250') === false) {
+                    fwrite($connection, "HELO $hostname\r\n");
+                    $response = $this->readResponse($connection);
+
+                    if (strpos($response, '250') === false) {
+                        fclose($connection);
+                        continue; // Try the next host
+                    }
                 }
 
-                // Set the sender email (doesn't matter what we use here)
-                fwrite($connection, "MAIL FROM:<check@example.com>\r\n");
-                $response = fgets($connection, 1024);
-                if (!$response || strpos($response, '250') === false) {
+                fwrite($connection, "MAIL FROM:<$sender>\r\n");
+                $response = $this->readResponse($connection);
+                if (strpos($response, '250') === false) {
                     fclose($connection);
                     continue; // Try the next host
                 }
 
                 // Check if the recipient exists
                 fwrite($connection, "RCPT TO:<$email>\r\n");
-                $response = fgets($connection, 1024);
+                $response = $this->readResponse($connection);
 
-                // Close the connection
                 fwrite($connection, "QUIT\r\n");
+                $this->readResponse($connection);
                 fclose($connection);
 
-                // Check the response for the RCPT TO command
-                if (strpos($response, '250') !== false) {
-                    return true; // Email exists
+                // Process the response for the RCPT TO command
+                if (strpos($response, '250') !== false || strpos($response, '251') !== false) {
+                    return true; // Email exists (accepted)
                 }
 
-                if (strpos($response, '550') !== false) {
-                    return false; // Email does not exist
+                if (
+                    strpos($response, '550') !== false ||
+                    strpos($response, '553') !== false ||
+                    strpos($response, '554') !== false
+                ) {
+                    return false; // Email definitely does not exist (rejected)
                 }
 
-                // If we got a response that's neither 250 nor 550, try the next server
+                if (
+                    strpos($response, '450') !== false ||
+                    strpos($response, '451') !== false ||
+                    strpos($response, '452') !== false
+                ) {
+                    continue; // Temporary failure or greylisting, try next server
+                }
+
+                // Any other response - try next server
                 continue;
             } catch (\Exception $e) {
                 if (is_resource($connection)) {
@@ -315,73 +346,138 @@ class EmailValidator
             }
         }
 
-        // If we've tried all hosts and none gave a definitive answer
-        return null; // Indeterminate (neither clearly accepted nor rejected)
+        return null; // Indeterminate result
     }
 
-    protected function smtpSend($connection, $cmd)
+    // Helper function to properly read SMTP responses (handling multi-line responses)
+    protected function readResponse($connection)
     {
-        if (!is_resource($connection) || feof($connection)) {
-            throw new \RuntimeException("SMTP connection is invalid or closed.");
+        if (!is_resource($connection)) {
+            return false;
         }
 
-        $writeResult = @fwrite($connection, $cmd . "\r\n");
-        if ($writeResult === false) {
-            throw new \RuntimeException("Failed to send command: $cmd");
-        }
+        $response = '';
+        while (true) {
+            $line = fgets($connection, 1024);
+            if ($line === false) {
+                return $response ?: false;
+            }
 
-        $response = fgets($connection, 1024);
+            $response .= $line;
 
-        $meta = stream_get_meta_data($connection);
-        if ($meta['timed_out'] || $response === false) {
-            throw new \RuntimeException("SMTP server timed out after command: $cmd");
+            // Check if this is the last line of the response
+            // SMTP response format: 3-digit code followed by a space for the last line,
+            // or a hyphen for continuation lines
+            if (strlen($line) < 4 || (substr($line, 3, 1) === ' ')) {
+                break;
+            }
         }
 
         return $response;
     }
 
-
     protected function isMailServerResponsive($email)
     {
         $domain = substr(strrchr($email, "@"), 1);
-        $mxRecords = dns_get_record($domain, DNS_MX);
-        if (empty($mxRecords))
-            return false;
 
-        $mxServer = $mxRecords[0]['target'];
-        $port = 25;
+        if (!getmxrr($domain, $mxHosts, $mxWeights)) {
+            $aRecords = dns_get_record($domain, DNS_A);
+            if (empty($aRecords)) {
+                return false; // No mail servers found
+            }
 
-        $connection = @fsockopen($mxServer, $port, $errno, $errstr, 5);
-        return $connection ? true : false;
+            $mxHosts = [$domain];
+        }
+
+        foreach ($mxHosts as $mxHost) {
+            $port = 25;
+            $connection = @fsockopen($mxHost, $port, $errno, $errstr, 5);
+
+            if ($connection) {
+                fclose($connection);
+                return true; // Successfully connected
+            }
+        }
+
+        return false; // Could not connect to any mail server
     }
 
     protected function isGreylisted($email)
     {
         $domain = substr(strrchr($email, "@"), 1);
-        $mxRecords = dns_get_record($domain, DNS_MX);
-        if (empty($mxRecords))
-            return false;
 
-        $mxServer = $mxRecords[0]['target'];
-        $port = 25;
+        // Get MX records
+        if (!getmxrr($domain, $mxHosts, $mxWeights)) {
+            return false; // No MX records
+        }
 
-        $connection = @fsockopen($mxServer, $port, $errno, $errstr, 5);
-        if (!$connection)
-            return false;
+        // Try each mail server
+        foreach ($mxHosts as $mxHost) {
+            $port = 25;
+            $connection = @fsockopen($mxHost, $port, $errno, $errstr, 5);
 
-        stream_set_timeout($connection, 5);
+            if (!$connection) {
+                continue; // Try next server
+            }
 
-        fwrite($connection, "EHLO $mxServer\r\n");
-        fgets($connection, 1024);
+            stream_set_timeout($connection, 5);
 
-        fwrite($connection, "MAIL FROM:<test@example.com>\r\n");
-        fgets($connection, 1024);
+            try {
+                // Read greeting
+                $response = fgets($connection, 1024);
+                if (!$response || strpos($response, '220') === false) {
+                    fclose($connection);
+                    continue;
+                }
 
-        fwrite($connection, "RCPT TO:<$email>\r\n");
-        $response = fgets($connection, 1024);
+                // Send EHLO
+                $hostname = gethostname() ?: 'validator.example.com';
+                fwrite($connection, "EHLO $hostname\r\n");
+                $response = $this->readResponse($connection);
 
-        fclose($connection);
-        return strpos($response, '450') !== false;
+                if (strpos($response, '250') === false) {
+                    // Try HELO if EHLO fails
+                    fwrite($connection, "HELO $hostname\r\n");
+                    $response = $this->readResponse($connection);
+
+                    if (strpos($response, '250') === false) {
+                        fclose($connection);
+                        continue;
+                    }
+                }
+
+                // Set sender
+                $sender = "verifier@" . (gethostname() ?: 'validator.example.com');
+                fwrite($connection, "MAIL FROM:<$sender>\r\n");
+                $response = $this->readResponse($connection);
+
+                if (strpos($response, '250') === false) {
+                    fclose($connection);
+                    continue;
+                }
+
+                // Check recipient
+                fwrite($connection, "RCPT TO:<$email>\r\n");
+                $response = $this->readResponse($connection);
+
+                // Clean up
+                fwrite($connection, "QUIT\r\n");
+                fclose($connection);
+
+                // Check for greylisting responses (temporary failures)
+                return (strpos($response, '450') !== false ||
+                    strpos($response, '451') !== false ||
+                    strpos($response, '452') !== false ||
+                    strpos($response, '421') !== false);
+            } catch (\Exception $e) {
+                if (is_resource($connection)) {
+                    fclose($connection);
+                }
+                continue;
+            }
+        }
+
+        return false; // No greylisting detected
     }
 
 }
