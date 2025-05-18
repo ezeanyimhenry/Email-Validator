@@ -239,61 +239,84 @@ class EmailValidator
     {
         $domain = substr(strrchr($email, "@"), 1);
 
-        $start = microtime(true);
-        $timeoutLimit = $this->config['timeoutLimit'] ?? 10;
-
-        if (!checkdnsrr($domain, 'MX') || !getmxrr($domain, $mxHosts) || empty($mxHosts)) {
-            return null; // Cannot check — no MX record
+        // Check for MX records and get their priority
+        if (!getmxrr($domain, $mxHosts, $mxWeights)) {
+            return null; // Cannot check - no MX records
         }
 
-        getmxrr($domain, $mxHosts);
         if (empty($mxHosts)) {
             return null;
         }
 
-        $mxHosts = array_slice($mxHosts, 0, 1);
-        $smtpPorts = [25];
+        // Sort MX hosts by priority (lower weight = higher priority)
+        array_multisort($mxWeights, SORT_ASC, $mxHosts);
 
-        $emailLocalPart = substr($email, 0, strpos($email, '@'));
+        // Try each MX host in order of priority
+        foreach ($mxHosts as $mxHost) {
+            $port = 25;
 
+            // Connect to the mail server
+            $connection = @fsockopen($mxHost, $port, $errno, $errstr, 5);
+            if (!$connection) {
+                continue; // Try the next host if this one fails
+            }
 
-        foreach ($mxHosts as $host) {
-            foreach ($smtpPorts as $port) {
-                if ((microtime(true) - $start) > $timeoutLimit) {
-                    return null; // Timeout exceeded
+            // Set a timeout for the connection
+            stream_set_timeout($connection, 5);
+
+            try {
+                // Read the initial greeting
+                $response = fgets($connection, 1024);
+                if (!$response || strpos($response, '220') === false) {
+                    fclose($connection);
+                    continue; // Try the next host
                 }
 
-                $connection = @fsockopen($host, $port, $errno, $errstr, 5);
-
-                if ($connection) {
-                    stream_set_timeout($connection, 5);
-
-                    try {
-                        $this->smtpSend($connection, "HELO $domain");
-                        $this->smtpSend($connection, "MAIL FROM:<check@$domain>");
-                        $response = $this->smtpSend($connection, "RCPT TO:<$email>");
-                        $this->smtpSend($connection, "QUIT");
-
-                        fclose($connection);
-
-                        if (preg_match('/^250|^220/', $response)) {
-                            return true;
-                        }
-
-                        if (preg_match('/^550/', $response)) {
-                            return false;
-                        }
-
-                        return null;
-                    } catch (\RuntimeException $e) {
-                        fclose($connection);
-                        return null;
-                    }
+                // Send HELO command
+                fwrite($connection, "HELO $domain\r\n");
+                $response = fgets($connection, 1024);
+                if (!$response || strpos($response, '250') === false) {
+                    fclose($connection);
+                    continue; // Try the next host
                 }
+
+                // Set the sender email (doesn't matter what we use here)
+                fwrite($connection, "MAIL FROM:<check@example.com>\r\n");
+                $response = fgets($connection, 1024);
+                if (!$response || strpos($response, '250') === false) {
+                    fclose($connection);
+                    continue; // Try the next host
+                }
+
+                // Check if the recipient exists
+                fwrite($connection, "RCPT TO:<$email>\r\n");
+                $response = fgets($connection, 1024);
+
+                // Close the connection
+                fwrite($connection, "QUIT\r\n");
+                fclose($connection);
+
+                // Check the response for the RCPT TO command
+                if (strpos($response, '250') !== false) {
+                    return true; // Email exists
+                }
+
+                if (strpos($response, '550') !== false) {
+                    return false; // Email does not exist
+                }
+
+                // If we got a response that's neither 250 nor 550, try the next server
+                continue;
+            } catch (\Exception $e) {
+                if (is_resource($connection)) {
+                    fclose($connection);
+                }
+                continue; // Try the next host
             }
         }
 
-        return null; // Indeterminate
+        // If we've tried all hosts and none gave a definitive answer
+        return null; // Indeterminate (neither clearly accepted nor rejected)
     }
 
     protected function smtpSend($connection, $cmd)
