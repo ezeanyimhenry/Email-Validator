@@ -15,6 +15,7 @@ class EmailValidatorTest extends TestCase
             'checkEmailExistence' => false,
             'checkMailServerResponsive' => false,
             'checkGreylisting' => false,
+            'checkCatchAll' => false,
         ], $config));
     }
 
@@ -167,5 +168,58 @@ class EmailValidatorTest extends TestCase
         $this->assertEquals('Disposable email detected.', $results['test@mailinator.com']['message']);
         $this->assertFalse($results['test@mailinator.com']['report']['disposable']['status']);
 
+    }
+
+    public function testCatchAllDomainDetected()
+    {
+        $validator = $this->createValidator(['checkCatchAll' => true]);
+        $validator->setMockResponse('isCatchAllDomain', true);
+
+        $result = $validator->validate('user@catchalldomain.com');
+
+        $this->assertFalse($result['isValid']);
+        $this->assertEquals('Catch-all domain detected.', $result['message']);
+        $this->assertFalse($result['report']['catchAll']['status']);
+    }
+
+    public function testCatchAllDomainNotDetected()
+    {
+        $validator = $this->createValidator(['checkCatchAll' => true]);
+        $validator->setMockResponse('isCatchAllDomain', false);
+
+        $result = $validator->validate('user@normaldomain.com');
+
+        $this->assertTrue($result['isValid']);
+        $this->assertEquals('The email is valid.', $result['message']);
+        $this->assertTrue($result['report']['catchAll']['status']);
+    }
+
+    public function testMultipleEmailsWithCatchAll()
+    {
+        $validator = $this->createValidator([
+            'checkDisposableEmail' => true,
+            'checkCatchAll' => true,
+        ]);
+        $validator->setDisposableEmailDomains(['mailinator.com']);
+        $validator->setMockResponse('isCatchAllDomain', false);
+
+        $emails = [
+            'valid.email@email.com',
+            'user@gmail.com',
+            'invalid-email',
+            'test@mailinator.com',
+            'someone@catchalldomain.com'
+        ];
+
+        // Override catch-all response for catchalldomain.com to true
+        $validator->setMockResponseForDomain('catchalldomain.com', 'isCatchAllDomain', true);
+
+        $results = $validator->validate($emails);
+
+        $this->assertTrue($results['valid.email@email.com']['isValid']);
+        $this->assertFalse($results['invalid-email']['isValid']);
+        $this->assertFalse($results['test@mailinator.com']['isValid']);
+        $this->assertFalse($results['someone@catchalldomain.com']['isValid']);
+        $this->assertTrue($results['user@gmail.com']['isValid']);
     }
 }
