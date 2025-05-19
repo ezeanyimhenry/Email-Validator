@@ -11,6 +11,7 @@ A PHP package for validating email addresses with various checks such as MX reco
 - Check for free email provider addresses
 - Check if mailbox exists
 - Check is mailbox is responsive
+- Check is domain uses catch-all
 
 ## Installation
 
@@ -95,6 +96,7 @@ $emailValidator = new EmailValidator([
     'checkEmailExistence' => true,
     'checkMailServerResponsive' => true,
     'checkGreylisting' => true,
+    'checkCatchAll' => false,
 ]);
 
 // Validate an email
